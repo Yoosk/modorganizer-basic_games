@@ -45,7 +45,10 @@ git clone https://github.com/Holt59/modorganizer-basic_games basic_games
 
 ## Supported games
 
-TODO
+| Game | File | Extras |
+|------|------|--------|
+| The Witcher 3 | [`game_witcher3.py`](games/game_witcher3.py) | <ul><li>steam detection</li><li>save game preview</li></ul> |
+| Stardew Valley | [`game_stardew_valley.py`](games/game_stardew_valley.py) | <ul><li>steam detection</li></ul> |
 
 ## How to add a new game?
 
