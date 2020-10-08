@@ -1,12 +1,12 @@
 # -*- encoding: utf-8 -*-
 
-import os
 import sys
 
-from typing import Callable
+from pathlib import Path
+from typing import Callable, Optional
 
 from PyQt5.QtCore import QDateTime, Qt
-from PyQt5.QtGui import QPixmap
+from PyQt5.QtGui import QPixmap, QImage
 from PyQt5.QtWidgets import QLabel, QWidget, QVBoxLayout
 
 import mobase
@@ -21,7 +21,7 @@ class BasicGameSaveGame(mobase.ISaveGame):
         return self._filename
 
     def getCreationTime(self):
-        return QDateTime(os.path.getmtime(self._filename))
+        return QDateTime(Path(self._filename).stat().st_mtime)
 
     def getSaveGroupIdentifier(self):
         return ""
@@ -34,18 +34,6 @@ class BasicGameSaveGame(mobase.ISaveGame):
 
 
 class BasicGameSaveGameInfoWidget(mobase.ISaveGameInfoWidget):
-    #     self._label = QLabel(parent)
-
-    # def setSave(self, filename):
-    #     print("setSave")
-    #     pixmap = QPixmap(
-    #         r"D:\Documents\The Witcher 3\gamesaves\AutoSave_54bde_7e22c000_5af7dca.png"
-    #     )
-    #     print(pixmap)
-    #     self._label.setPixmap(pixmap)
-    #     self.resize(250, 250)
-    #     return self._label
-
     def __init__(self, parent: QWidget, get_preview: Callable[[str], str]):
         super().__init__(parent)
 
@@ -70,10 +58,18 @@ class BasicGameSaveGameInfoWidget(mobase.ISaveGameInfoWidget):
 
         # Retrieve the pixmap:
         value = self._get_preview(filename)
-        if isinstance(value, str):
+
+        if value is None:
+            return
+
+        if isinstance(value, Path):
+            pixmap = QPixmap(str(value))
+        elif isinstance(value, str):
             pixmap = QPixmap(value)
         elif isinstance(value, QPixmap):
             pixmap = value
+        elif isinstance(value, QImage):
+            pixmap = QPixmap.fromImage(value)
         else:
             print(
                 "Failed to retrieve the preview, bad return type: {}.".format(
@@ -90,7 +86,7 @@ class BasicGameSaveGameInfoWidget(mobase.ISaveGameInfoWidget):
 
 
 class BasicGameSaveGameInfo(mobase.SaveGameInfo):
-    def __init__(self, get_preview: Callable[[str], str]):
+    def __init__(self, get_preview: Optional[Callable[[str], str]] = None):
         super().__init__()
         self._get_preview = get_preview
 
@@ -101,7 +97,9 @@ class BasicGameSaveGameInfo(mobase.SaveGameInfo):
         return {}
 
     def getSaveGameWidget(self, parent=None):
-        return BasicGameSaveGameInfoWidget(parent, self._get_preview)
+        if self._get_preview is not None:
+            return BasicGameSaveGameInfoWidget(parent, self._get_preview)
+        return None
 
     def hasScriptExtenderSave(self, filename):
         return False

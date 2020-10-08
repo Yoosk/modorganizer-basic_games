@@ -1,27 +1,29 @@
 # -*- encoding: utf-8 -*-
 
-from PyQt5.QtCore import QDir
-
 import mobase
 
 
 from ..basic_game import BasicGame
-from ..basic_features.basic_save_game_info import BasicGameSaveGameInfo
+from ..basic_features import BasicGameSaveGameInfo
 
 
 class Witcher3Game(BasicGame):
 
-    Name: str = "Witcher 3 Support Plugin"
-    Author: str = "Holt59"
-    Version: str = "1.0.0a"
-    Description: str = "The Description Of The Dead"
+    Name = "Witcher 3 Support Plugin"
+    Author = "Holt59"
+    Version = "1.0.0a"
 
-    GameName: str = "The Witcher 3"
-    GameShortName: str = "witcher3"
-    GameBinary: str = "bin/x64/witcher3.exe"
-    GameDataPath: str = "Mods"
-    GameSaveExtension: str = "sav"
-    GameSteamId = 292030
+    GameName = "The Witcher 3: Wild Hunt"
+    GameShortName = "witcher3"
+    GaneNexusHame = "witcher3"
+    GameNexusId = 952
+    GameSteamId = [499450, 292030]
+    GameGogId = [1640424747, 1495134320, 1207664663, 1207664643]
+    GameBinary = "bin/x64/witcher3.exe"
+    GameDataPath = "Mods"
+    GameSaveExtension = "sav"
+    GameDocumentsDirectory = "%DOCUMENTS%/The Witcher 3"
+    GameSavesDirectory = "%GAME_DOCUMENTS%/gamesaves"
 
     def init(self, organizer: mobase.IOrganizer):
         super().init(organizer)
@@ -29,6 +31,3 @@ class Witcher3Game(BasicGame):
             lambda s: s.replace(".sav", ".png")
         )
         return True
-
-    def savesDirectory(self):
-        return QDir(self.documentsDirectory().absoluteFilePath("gamesaves"))
