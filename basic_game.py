@@ -1,24 +1,34 @@
 # -*- encoding: utf-8 -*-
 
 import shutil
-
+import sys
 from pathlib import Path
-from typing import List, Union, Optional, TypeVar, Callable, Generic, Dict
+from typing import Callable, Dict, Generic, List, Optional, TypeVar, Union
 
-
-from PyQt5.QtCore import QDir, QFileInfo, QStandardPaths
-from PyQt5.QtGui import QIcon
+from PyQt6.QtCore import QDir, QFileInfo, QStandardPaths
+from PyQt6.QtGui import QIcon
 
 import mobase
 
+from .basic_features.basic_save_game_info import BasicGameSaveGame
+
 
 def replace_variables(value: str, game: "BasicGame") -> str:
-    """ Replace special paths in the given value. """
+    """Replace special paths in the given value."""
 
     if value.find("%DOCUMENTS%") != -1:
         value = value.replace(
             "%DOCUMENTS%",
-            QStandardPaths.writableLocation(QStandardPaths.DocumentsLocation),
+            QStandardPaths.writableLocation(
+                QStandardPaths.StandardLocation.DocumentsLocation
+            ),
+        )
+    if value.find("%USERPROFILE%") != -1:
+        value = value.replace(
+            "%USERPROFILE%",
+            QStandardPaths.writableLocation(
+                QStandardPaths.StandardLocation.HomeLocation
+            ),
         )
     if value.find("%GAME_DOCUMENTS%") != -1:
         value = value.replace(
@@ -92,7 +102,7 @@ class BasicGameMapping(Generic[T]):
             )
 
     def get(self) -> T:
-        """ Return the value of this mapping. """
+        """Return the value of this mapping."""
         value = self._default(self._game)  # type: ignore
 
         if isinstance(value, str):
@@ -150,6 +160,15 @@ class BasicGameOptionsMapping(BasicGameMapping[List[T]]):
         except ValueError:
             self._index = -1
 
+    def has_value(self) -> bool:
+        """
+        Check if a value was set for this options mapping.
+
+        Returns:
+            True if a value was set, False otherwise.
+        """
+        return self._index != -1
+
     def current(self) -> T:
         values = self._default(self._game)  # type: ignore
 
@@ -188,17 +207,26 @@ class BasicGameMappings:
     savegameExtension: BasicGameMapping[str]
     steamAPPId: BasicGameOptionsMapping[str]
     gogAPPId: BasicGameOptionsMapping[str]
+    originManifestIds: BasicGameOptionsMapping[str]
+    originWatcherExecutables: BasicGameMapping[List[str]]
+    epicAPPId: BasicGameOptionsMapping[str]
+    eaDesktopContentId: BasicGameOptionsMapping[str]
+    supportURL: BasicGameMapping[str]
 
     @staticmethod
     def _default_documents_directory(game):
 
         folders = [
             "{}/My Games/{}".format(
-                QStandardPaths.writableLocation(QStandardPaths.DocumentsLocation),
+                QStandardPaths.writableLocation(
+                    QStandardPaths.StandardLocation.DocumentsLocation
+                ),
                 game.gameName(),
             ),
             "{}/{}".format(
-                QStandardPaths.writableLocation(QStandardPaths.DocumentsLocation),
+                QStandardPaths.writableLocation(
+                    QStandardPaths.StandardLocation.DocumentsLocation
+                ),
                 game.gameName(),
             ),
         ]
@@ -230,7 +258,10 @@ class BasicGameMappings:
         self.gameName = BasicGameMapping(game, "GameName", "gameName")
         self.gameShortName = BasicGameMapping(game, "GameShortName", "gameShortName")
         self.gameNexusName = BasicGameMapping(
-            game, "GameNexusName", "gameNexusName", default=lambda g: g.gameShortName(),
+            game,
+            "GameNexusName",
+            "gameNexusName",
+            default=lambda g: g.gameShortName(),
         )
         self.validShortNames = BasicGameMapping(
             game,
@@ -246,7 +277,10 @@ class BasicGameMappings:
         )
         self.binaryName = BasicGameMapping(game, "GameBinary", "binaryName")
         self.launcherName = BasicGameMapping(
-            game, "GameLauncher", "getLauncherName", default=lambda g: "",
+            game,
+            "GameLauncher",
+            "getLauncherName",
+            default=lambda g: "",
         )
         self.dataDirectory = BasicGameMapping(game, "GameDataPath", "dataDirectory")
         self.documentsDirectory = BasicGameMapping(
@@ -279,6 +313,33 @@ class BasicGameMappings:
         self.gogAPPId = BasicGameOptionsMapping(
             game, "GameGogId", "gogAPPId", default=lambda g: "", apply_fn=ids_apply
         )
+        self.originManifestIds = BasicGameOptionsMapping(
+            game,
+            "GameOriginManifestIds",
+            "originManifestIds",
+            default=lambda g: "",
+            apply_fn=ids_apply,
+        )
+        self.originWatcherExecutables = BasicGameMapping(
+            game,
+            "GameOriginWatcherExecutables",
+            "originWatcherExecutables",
+            apply_fn=lambda s: [s] if isinstance(s, str) else s,
+            default=lambda g: [],
+        )
+        self.epicAPPId = BasicGameOptionsMapping(
+            game, "GameEpicId", "epicAPPId", default=lambda g: "", apply_fn=ids_apply
+        )
+        self.eaDesktopContentId = BasicGameOptionsMapping(
+            game,
+            "GameEaDesktopId",
+            "eaDesktopContentId",
+            default=lambda g: "",
+            apply_fn=ids_apply,
+        )
+        self.supportURL = BasicGameMapping(
+            game, "GameSupportURL", "supportURL", default=lambda g: ""
+        )
 
 
 class BasicGame(mobase.IPluginGame):
@@ -287,17 +348,26 @@ class BasicGame(mobase.IPluginGame):
     to make it easier to create game plugins without having to implement
     all the methods of mobase.IPluginGame."""
 
-    # List of steam and GOG games:
+    # List of steam, GOG, origin and Epic games:
     steam_games: Dict[str, Path]
     gog_games: Dict[str, Path]
+    origin_games: Dict[str, Path]
+    epic_games: Dict[str, Path]
+    eadesktop_games: Dict[str, Path]
 
     @staticmethod
     def setup():
-        from .steam_utils import find_games as find_steam_games
+        from .eadesktop_utils import find_games as find_eadesktop_games
+        from .epic_utils import find_games as find_epic_games
         from .gog_utils import find_games as find_gog_games
+        from .origin_utils import find_games as find_origin_games
+        from .steam_utils import find_games as find_steam_games
 
         BasicGame.steam_games = find_steam_games()
         BasicGame.gog_games = find_gog_games()
+        BasicGame.origin_games = find_origin_games()
+        BasicGame.epic_games = find_epic_games()
+        BasicGame.eadesktop_games = find_eadesktop_games()
 
     # File containing the plugin:
     _fromName: str
@@ -320,39 +390,101 @@ class BasicGame(mobase.IPluginGame):
         self._gamePath = ""
         self._featureMap = {}
 
-        self.mappings: BasicGameMappings = BasicGameMappings(self)
+        self._mappings: BasicGameMappings = BasicGameMappings(self)
 
-    """
-    Here IPlugin interface stuff.
-    """
+    # Specific to BasicGame:
+    def is_steam(self) -> bool:
+        return self._mappings.steamAPPId.has_value()
+
+    def is_gog(self) -> bool:
+        return self._mappings.gogAPPId.has_value()
+
+    def is_origin(self) -> bool:
+        return self._mappings.originManifestIds.has_value()
+
+    def is_epic(self) -> bool:
+        return self._mappings.epicAPPId.has_value()
+
+    def is_eadesktop(self) -> bool:
+        return self._mappings.eaDesktopContentId.has_value()
+
+    # IPlugin interface:
 
     def init(self, organizer: mobase.IOrganizer) -> bool:
         self._organizer = organizer
+        if self._mappings.originWatcherExecutables.get():
+            from .origin_utils import OriginWatcher
+
+            self.origin_watcher = OriginWatcher(
+                self._mappings.originWatcherExecutables.get()
+            )
+            if not self._organizer.onAboutToRun(
+                lambda appName: self.origin_watcher.spawn_origin_watcher()
+            ):
+                print("Failed to register onAboutToRun callback!", file=sys.stderr)
+                return False
+            if not self._organizer.onFinishedRun(
+                lambda appName, result: self.origin_watcher.stop_origin_watcher()
+            ):
+                print("Failed to register onFinishedRun callback!", file=sys.stderr)
+                return False
         return True
 
     def name(self) -> str:
-        return self.mappings.name.get()
+        return self._mappings.name.get()
 
     def author(self) -> str:
-        return self.mappings.author.get()
+        return self._mappings.author.get()
 
     def description(self) -> str:
-        return self.mappings.description.get()
+        return self._mappings.description.get()
 
     def version(self) -> mobase.VersionInfo:
-        return self.mappings.version.get()
+        return self._mappings.version.get()
 
     def isActive(self) -> bool:
-        return True
+        if not self._organizer.managedGame():
+            return False
+
+        # Note: self is self._organizer.managedGame() does not work:
+        return self.name() == self._organizer.managedGame().name()
 
     def settings(self) -> List[mobase.PluginSetting]:
         return []
 
+    # IPluginGame interface:
+
+    def detectGame(self):
+        for steam_id in self._mappings.steamAPPId.get():
+            if steam_id in BasicGame.steam_games:
+                self.setGamePath(BasicGame.steam_games[steam_id])
+                return
+
+        for gog_id in self._mappings.gogAPPId.get():
+            if gog_id in BasicGame.gog_games:
+                self.setGamePath(BasicGame.gog_games[gog_id])
+                return
+
+        for origin_manifest_id in self._mappings.originManifestIds.get():
+            if origin_manifest_id in BasicGame.origin_games:
+                self.setGamePath(BasicGame.origin_games[origin_manifest_id])
+                return
+
+        for epic_id in self._mappings.epicAPPId.get():
+            if epic_id in BasicGame.epic_games:
+                self.setGamePath(BasicGame.epic_games[epic_id])
+                return
+
+        for eadesktop_content_id in self._mappings.eaDesktopContentId.get():
+            if eadesktop_content_id in BasicGame.eadesktop_games:
+                self.setGamePath(BasicGame.eadesktop_games[eadesktop_content_id])
+                return
+
     def gameName(self) -> str:
-        return self.mappings.gameName.get()
+        return self._mappings.gameName.get()
 
     def gameShortName(self) -> str:
-        return self.mappings.gameShortName.get()
+        return self._mappings.gameShortName.get()
 
     def gameIcon(self) -> QIcon:
         return mobase.getIconForExecutable(
@@ -360,28 +492,37 @@ class BasicGame(mobase.IPluginGame):
         )
 
     def validShortNames(self) -> List[str]:
-        return self.mappings.validShortNames.get()
+        return self._mappings.validShortNames.get()
 
     def gameNexusName(self) -> str:
-        return self.mappings.gameNexusName.get()
+        return self._mappings.gameNexusName.get()
 
     def nexusModOrganizerID(self) -> int:
         return 0
 
     def nexusGameID(self) -> int:
-        return self.mappings.nexusGameId.get()
+        return self._mappings.nexusGameId.get()
 
     def steamAPPId(self) -> str:
-        return self.mappings.steamAPPId.current()
+        return self._mappings.steamAPPId.current()
 
     def gogAPPId(self) -> str:
-        return self.mappings.gogAPPId.current()
+        return self._mappings.gogAPPId.current()
+
+    def epicAPPId(self) -> str:
+        return self._mappings.epicAPPId.current()
+
+    def eaDesktopContentId(self) -> str:
+        return self._mappings.eaDesktopContentId.current()
 
     def binaryName(self) -> str:
-        return self.mappings.binaryName.get()
+        return self._mappings.binaryName.get()
 
     def getLauncherName(self) -> str:
-        return self.mappings.launcherName.get()
+        return self._mappings.launcherName.get()
+
+    def getSupportURL(self) -> str:
+        return self._mappings.supportURL.get()
 
     def executables(self) -> List[mobase.ExecutableInfo]:
         execs = []
@@ -405,19 +546,23 @@ class BasicGame(mobase.IPluginGame):
     def executableForcedLoads(self) -> List[mobase.ExecutableForcedLoadSetting]:
         return []
 
-    def savegameExtension(self) -> str:
-        return self.mappings.savegameExtension.get()
+    def listSaves(self, folder: QDir) -> List[mobase.ISaveGame]:
+        ext = self._mappings.savegameExtension.get()
+        return [
+            BasicGameSaveGame(path)
+            for path in Path(folder.absolutePath()).glob(f"**/*.{ext}")
+        ]
 
-    def savegameSEExtension(self) -> str:
-        return ""
-
-    def initializeProfile(self, path: QDir, settings: int):
+    def initializeProfile(self, path: QDir, settings: mobase.ProfileSetting):
         if settings & mobase.ProfileSetting.CONFIGURATION:
             for iniFile in self.iniFiles():
-                shutil.copyfile(
-                    self.documentsDirectory().absoluteFilePath(iniFile),
-                    path.absoluteFilePath(iniFile),
-                )
+                try:
+                    shutil.copyfile(
+                        self.documentsDirectory().absoluteFilePath(iniFile),
+                        path.absoluteFilePath(QFileInfo(iniFile).fileName()),
+                    )
+                except FileNotFoundError:
+                    Path(path.absoluteFilePath(QFileInfo(iniFile).fileName())).touch()
 
     def primarySources(self):
         return []
@@ -455,17 +600,7 @@ class BasicGame(mobase.IPluginGame):
         return aQDir.exists(self.binaryName())
 
     def isInstalled(self) -> bool:
-        for steam_id in self.mappings.steamAPPId.get():
-            if steam_id in BasicGame.steam_games:
-                self.setGamePath(BasicGame.steam_games[steam_id])
-                return True
-
-        for gog_id in self.mappings.gogAPPId.get():
-            if gog_id in BasicGame.gog_games:
-                self.setGamePath(BasicGame.gog_games[gog_id])
-                return True
-
-        return False
+        return bool(self._gamePath)
 
     def gameDirectory(self) -> QDir:
         """
@@ -475,7 +610,7 @@ class BasicGame(mobase.IPluginGame):
 
     def dataDirectory(self) -> QDir:
         return QDir(
-            self.gameDirectory().absoluteFilePath(self.mappings.dataDirectory.get())
+            self.gameDirectory().absoluteFilePath(self._mappings.dataDirectory.get())
         )
 
     def setGamePath(self, path: Union[Path, str]):
@@ -483,19 +618,29 @@ class BasicGame(mobase.IPluginGame):
 
         path = Path(path)
 
-        # Check if we have a matching steam ID or GOG id and set the index accordingly:
+        # Check if we have a matching steam, GOG, Origin or EA Desktop id and set the
+        # index accordingly:
         for steamid, steampath in BasicGame.steam_games.items():
             if steampath == path:
-                self.mappings.steamAPPId.set_value(steamid)
+                self._mappings.steamAPPId.set_value(steamid)
         for gogid, gogpath in BasicGame.gog_games.items():
             if gogpath == path:
-                self.mappings.steamAPPId.set_value(gogid)
+                self._mappings.steamAPPId.set_value(gogid)
+        for originid, originpath in BasicGame.origin_games.items():
+            if originpath == path:
+                self._mappings.originManifestIds.set_value(originid)
+        for epicid, epicpath in BasicGame.epic_games.items():
+            if epicpath == path:
+                self._mappings.epicAPPId.set_value(epicid)
+        for eadesktopid, eadesktoppath in BasicGame.eadesktop_games.items():
+            if eadesktoppath == path:
+                self._mappings.eaDesktopContentId.set_value(eadesktopid)
 
     def documentsDirectory(self) -> QDir:
-        return self.mappings.documentsDirectory.get()
+        return self._mappings.documentsDirectory.get()
 
     def savesDirectory(self) -> QDir:
-        return self.mappings.savesDirectory.get()
+        return self._mappings.savesDirectory.get()
 
     def _featureList(self):
         return self._featureMap

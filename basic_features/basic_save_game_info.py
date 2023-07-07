@@ -1,40 +1,39 @@
 # -*- encoding: utf-8 -*-
 
 import sys
-
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Callable
 
-from PyQt5.QtCore import QDateTime, Qt
-from PyQt5.QtGui import QPixmap, QImage
-from PyQt5.QtWidgets import QLabel, QWidget, QVBoxLayout
+from PyQt6.QtCore import QDateTime, Qt
+from PyQt6.QtGui import QImage, QPixmap
+from PyQt6.QtWidgets import QLabel, QVBoxLayout, QWidget
 
 import mobase
 
 
 class BasicGameSaveGame(mobase.ISaveGame):
-    def __init__(self, filename):
+    def __init__(self, filepath: Path):
         super().__init__()
-        self._filename = filename
+        self._filepath = filepath
 
-    def getFilename(self):
-        return self._filename
+    def getFilepath(self) -> str:
+        return self._filepath.as_posix()
+
+    def getName(self) -> str:
+        return self._filepath.name
 
     def getCreationTime(self):
-        return QDateTime(Path(self._filename).stat().st_mtime)
+        return QDateTime.fromSecsSinceEpoch(int(self._filepath.stat().st_mtime))
 
-    def getSaveGroupIdentifier(self):
+    def getSaveGroupIdentifier(self) -> str:
         return ""
 
-    def allFiles(self):
-        return [self._filename]
-
-    def hasScriptExtenderFile(self):
-        return False
+    def allFiles(self) -> list[str]:
+        return [self.getFilepath()]
 
 
 class BasicGameSaveGameInfoWidget(mobase.ISaveGameInfoWidget):
-    def __init__(self, parent: QWidget, get_preview: Callable[[str], str]):
+    def __init__(self, parent: QWidget, get_preview: Callable[[Path], Path | None]):
         super().__init__(parent)
 
         self._get_preview = get_preview
@@ -42,22 +41,26 @@ class BasicGameSaveGameInfoWidget(mobase.ISaveGameInfoWidget):
         layout = QVBoxLayout()
         self._label = QLabel()
         palette = self._label.palette()
-        palette.setColor(self._label.foregroundRole(), Qt.white)
+        palette.setColor(self._label.foregroundRole(), Qt.GlobalColor.white)
         self._label.setPalette(palette)
         layout.addWidget(self._label)
         self.setLayout(layout)
 
         palette = self.palette()
-        palette.setColor(self.backgroundRole(), Qt.black)
+        palette.setColor(self.backgroundRole(), Qt.GlobalColor.black)
         self.setAutoFillBackground(True)
         self.setPalette(palette)
 
-    def setSave(self, filename):
+        self.setWindowFlags(
+            Qt.WindowType.ToolTip | Qt.WindowType.BypassGraphicsProxyWidget
+        )
+
+    def setSave(self, save: mobase.ISaveGame):
         # Resize the label to (0, 0) to hide it:
-        self._label.resize(0, 0)
+        self.resize(0, 0)
 
         # Retrieve the pixmap:
-        value = self._get_preview(filename)
+        value = self._get_preview(Path(save.getFilepath()))
 
         if value is None:
             return
@@ -86,20 +89,14 @@ class BasicGameSaveGameInfoWidget(mobase.ISaveGameInfoWidget):
 
 
 class BasicGameSaveGameInfo(mobase.SaveGameInfo):
-    def __init__(self, get_preview: Optional[Callable[[str], str]] = None):
+    def __init__(self, get_preview: Callable[[Path], Path | None] | None = None):
         super().__init__()
         self._get_preview = get_preview
 
-    def getSaveGameInfo(self, filename):
-        return BasicGameSaveGame(filename)
-
-    def getMissingAssets(self, filename):
+    def getMissingAssets(self, save: mobase.ISaveGame):
         return {}
 
     def getSaveGameWidget(self, parent=None):
         if self._get_preview is not None:
             return BasicGameSaveGameInfoWidget(parent, self._get_preview)
         return None
-
-    def hasScriptExtenderSave(self, filename):
-        return False

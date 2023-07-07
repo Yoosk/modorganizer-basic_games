@@ -1,8 +1,8 @@
 # -*- encoding: utf-8 -*-
 
-from PyQt5.QtCore import QFileInfo
-
 from typing import List
+
+from PyQt6.QtCore import QFileInfo
 
 import mobase
 
@@ -45,6 +45,10 @@ class MountAndBladeIIGame(BasicGame):
     GameName = "Mount & Blade II: Bannerlord"
     GameShortName = "mountandblade2bannerlord"
     GameDataPath = "Modules"
+    GameSupportURL = (
+        r"https://github.com/ModOrganizer2/modorganizer-basic_games/wiki/"
+        "Game:-Mount-&-Blade-II:-Bannerlord"
+    )
 
     GameBinary = "bin/Win64_Shipping_Client/TaleWorlds.MountAndBlade.Launcher.exe"
 
@@ -72,7 +76,8 @@ class MountAndBladeIIGame(BasicGame):
             mobase.ExecutableInfo(
                 "Mount & Blade II: Bannerlord",
                 QFileInfo(
-                    self.gameDirectory(), "bin/Win64_Shipping_Client/Bannerlord.exe",
+                    self.gameDirectory(),
+                    "bin/Win64_Shipping_Client/Bannerlord.exe",
                 ),
             ),
             mobase.ExecutableInfo(
@@ -85,7 +90,8 @@ class MountAndBladeIIGame(BasicGame):
             mobase.ExecutableInfo(
                 "Mount & Blade II: Bannerlord (BE)",
                 QFileInfo(
-                    self.gameDirectory(), "bin/Win64_Shipping_Client/Bannerlord_BE.exe",
+                    self.gameDirectory(),
+                    "bin/Win64_Shipping_Client/Bannerlord_BE.exe",
                 ),
             ),
         ]

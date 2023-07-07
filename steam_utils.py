@@ -2,11 +2,12 @@
 
 # Code greatly inspired by https://github.com/LostDragonist/steam-library-setup-tool
 
-import os
+import sys
 import winreg  # type: ignore
-
 from pathlib import Path
-from typing import Dict
+from typing import Dict, List, Optional
+
+import vdf
 
 
 class SteamGame:
@@ -22,29 +23,36 @@ class SteamGame:
 
 
 class LibraryFolder:
-    def __init__(self, path: str):
+    def __init__(self, path: Path):
         self.path = path
 
         self.games = []
-        for filename in os.listdir(os.path.join(path, "steamapps")):
-            if filename.startswith("appmanifest"):
-                with open(
-                    os.path.join(path, "steamapps", filename), "r", encoding="utf-8"
-                ) as fp:
-                    i, n = None, None
-                    for line in fp:
-                        line = line.strip()
+        for filepath in path.joinpath("steamapps").glob("appmanifest_*.acf"):
+            try:
+                with open(filepath, "r", encoding="utf-8") as fp:
+                    info = vdf.load(fp)
+                    app_state = info["AppState"]
+            except KeyError:
+                print(
+                    f'Unable to read application state from "{filepath}"',
+                    file=sys.stderr,
+                )
+                continue
+            except Exception as e:
+                print(f'Unable to parse file "{filepath}": {e}', file=sys.stderr)
+                continue
 
-                        if line.startswith('"appid"'):
-                            i = line.replace('"appid"', "").strip()[1:-1]
-                        if line.startswith('"installdir"'):
-                            n = line.replace('"installdir"', "").strip()[1:-1]
-
-                        if i is not None and n is not None:
-                            break
-                if i is None or n is None:
-                    continue
-                self.games.append(SteamGame(i, n))
+            try:
+                app_id = app_state["appid"]
+                install_dir = app_state["installdir"]
+                self.games.append(SteamGame(app_id, install_dir))
+            except KeyError:
+                print(
+                    f"Unable to read application ID or installation folder "
+                    f'from "{filepath}"',
+                    file=sys.stderr,
+                )
+                continue
 
     def __repr__(self):
         return str(self)
@@ -53,65 +61,93 @@ class LibraryFolder:
         return "LibraryFolder at {}: {}".format(self.path, self.games)
 
 
-def parse_library_info(library_vdf_path):
+def parse_library_info(library_vdf_path: Path) -> List[LibraryFolder]:
+    """
+    Read library folders from the main library file.
+
+    Args:
+        library_vdf_path: The main library file (from the Steam installation
+            folder).
+
+    Returns:
+        A list of LibraryFolder, for each library found.
+    """
+
+    with open(library_vdf_path, "r", encoding="utf-8") as f:
+        info = vdf.load(f)
 
     library_folders = []
 
-    with open(library_vdf_path, "r") as f:
+    if "libraryfolders" in info:
+        # new format
+        info_folders = info["libraryfolders"]
 
-        # Find the line containing "LibraryFolders" (quoted):
-        it = iter(f)
-        for line in it:
+        def get_path(value):
+            return value["path"]
 
-            line = line.strip().strip('"')
-            if line == "LibraryFolders":
-                break
+    elif "LibraryFolders" in info:
+        # old format
+        info_folders = info["LibraryFolders"]
 
-        # Find the opening {:
-        for line in it:
-            if line.strip() == "{":
-                break
+        def get_path(value):
+            return value
 
-        # Read the folders:
-        for line in it:
-            line = line.strip()
-            if line == "}":
-                break
+    else:
+        raise ValueError(f'Unknown file format from "{library_vdf_path}"')
 
-            # Strip " on each side and split, we should get
-            # 3 parts with an empty middle
-            parts = line.strip('"').split('"')
+    for key, value in info_folders.items():
+        # only keys that are integer values contains library folder
+        try:
+            int(key)
+        except ValueError:
+            continue
 
-            if len(parts) == 3 and not parts[1].strip():
-                try:
-                    int(parts[0].strip())
-                except ValueError:
-                    continue
-
-                try:
-                    library_folders.append(
-                        LibraryFolder(parts[2].strip().replace("\\\\", "\\"))
-                    )
-                except (FileNotFoundError, ValueError):
-                    continue
+        path = get_path(value)
+        try:
+            library_folders.append(LibraryFolder(Path(path)))
+        except Exception as e:
+            print(
+                'Failed to read steam library from "{}", {}'.format(path, repr(e)),
+                file=sys.stderr,
+            )
 
     return library_folders
 
 
-def find_games() -> Dict[str, Path]:
+def find_steam_path() -> Optional[Path]:
+    """
+    Retrieve the Steam path, if available.
+
+    Returns:
+        The Steam path, or None if Steam is not installed.
+    """
     try:
         with winreg.OpenKey(winreg.HKEY_CURRENT_USER, "Software\\Valve\\Steam") as key:
             value = winreg.QueryValueEx(key, "SteamExe")
-            steam_path = value[0].replace("/", "\\")
+            return Path(value[0].replace("/", "\\")).parent
     except FileNotFoundError:
+        return None
+
+
+def find_games() -> Dict[str, Path]:
+    """
+    Find the list of Steam games installed.
+
+    Returns:
+        A mapping from Steam game ID to install locations for available
+        Steam games.
+    """
+    steam_path = find_steam_path()
+    if not steam_path:
         return {}
 
-    library_vdf_path = os.path.join(
-        os.path.dirname(steam_path), "steamapps", "libraryfolders.vdf"
-    )
+    library_vdf_path = steam_path.joinpath("steamapps", "libraryfolders.vdf")
 
-    library_folders = parse_library_info(library_vdf_path)
-    library_folders.append(LibraryFolder(os.path.dirname(steam_path)))
+    try:
+        library_folders = parse_library_info(library_vdf_path)
+        library_folders.append(LibraryFolder(steam_path))
+    except FileNotFoundError:
+        return {}
 
     games: Dict[str, Path] = {}
     for library in library_folders:

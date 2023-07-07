@@ -2,3 +2,9 @@
 __pycache__
 .tox
 .vscode
+.idea
+
+# Mob / Umbrella
+mob.log
+vsbuild
+lib

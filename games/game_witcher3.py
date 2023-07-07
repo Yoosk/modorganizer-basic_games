@@ -1,10 +1,20 @@
 # -*- encoding: utf-8 -*-
 
+from pathlib import Path
+from typing import List
+
+from PyQt6.QtCore import QDir
+
 import mobase
 
-
-from ..basic_game import BasicGame
 from ..basic_features import BasicGameSaveGameInfo
+from ..basic_features.basic_save_game_info import BasicGameSaveGame
+from ..basic_game import BasicGame
+
+
+class Witcher3SaveGame(BasicGameSaveGame):
+    def allFiles(self):
+        return [self._filename, self._filename.replace(".sav", ".png")]
 
 
 class Witcher3Game(BasicGame):
@@ -24,10 +34,24 @@ class Witcher3Game(BasicGame):
     GameSaveExtension = "sav"
     GameDocumentsDirectory = "%DOCUMENTS%/The Witcher 3"
     GameSavesDirectory = "%GAME_DOCUMENTS%/gamesaves"
+    GameSupportURL = (
+        r"https://github.com/ModOrganizer2/modorganizer-basic_games/wiki/"
+        "Game:-The-Witcher-3"
+    )
 
     def init(self, organizer: mobase.IOrganizer):
         super().init(organizer)
         self._featureMap[mobase.SaveGameInfo] = BasicGameSaveGameInfo(
-            lambda s: s.replace(".sav", ".png")
+            lambda s: s.with_suffix(".png")
         )
         return True
+
+    def iniFiles(self):
+        return ["user.settings", "input.settings"]
+
+    def listSaves(self, folder: QDir) -> List[mobase.ISaveGame]:
+        ext = self._mappings.savegameExtension.get()
+        return [
+            Witcher3SaveGame(path)
+            for path in Path(folder.absolutePath()).glob(f"*.{ext}")
+        ]
